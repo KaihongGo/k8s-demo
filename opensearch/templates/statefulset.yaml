@@ -23,15 +23,7 @@ spec:
   podManagementPolicy: Parallel
   updateStrategy:
     type: RollingUpdate
-  volumeClaimTemplates:
-  - metadata:
-      name: opensearch-cluster-master
-    spec:
-      accessModes:
-      - "ReadWriteOnce"
-      resources:
-        requests:
-          storage: "20Gi"
+  volumeClaimTemplates: []  # Remove volumeClaimTemplates as we're using hostPath
   template:
     metadata:
       name: "opensearch-cluster-master"
@@ -50,6 +42,14 @@ spec:
         runAsUser: 1000
       automountServiceAccountToken: false
       affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: opensearch-storage
+                operator: In
+                values:
+                - "true"  # Ensure that the node has local storage
         podAntiAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
           - weight: 1
@@ -72,6 +72,10 @@ spec:
           name: opensearch-cluster-master-config
       - emptyDir: {}
         name: config-emptydir
+      - name: opensearch-cluster-master
+        hostPath:
+          path: /mnt/data/opensearch  # Local path on the host node
+          type: DirectoryOrCreate    # Ensures the directory is created if it doesn't exist
       enableServiceLinks: true
       initContainers:
       - name: fsgroup-volume
@@ -96,8 +100,7 @@ spec:
         - |
           #!/usr/bin/env bash
           cp -r /tmp/configfolder/*  /tmp/config/
-        resources:
-          {}
+        resources: {}
         volumeMounts:
           - mountPath: /tmp/config/
             name: config-emptydir
