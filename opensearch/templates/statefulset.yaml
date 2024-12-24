@@ -32,6 +32,8 @@ spec:
       resources:
         requests:
           storage: "20Gi"
+      storageClassName: "local-storage"  # Use the local-storage StorageClass
+      volumeMode: Filesystem
   template:
     metadata:
       name: "opensearch-cluster-master"
@@ -50,21 +52,31 @@ spec:
         runAsUser: 1000
       automountServiceAccountToken: false
       affinity:
+        # Node Affinity: Schedule pods only on specific nodes (e.g., node-1, node-2)
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: opensearch-storage
+                    operator: In
+                    values:
+                      - "true"
+
+        # Pod Anti-Affinity: Avoid scheduling multiple pods with the same label on the same node
         podAntiAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-          - weight: 1
-            podAffinityTerm:
-              topologyKey: kubernetes.io/hostname
-              labelSelector:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
                 matchExpressions:
-                - key: app.kubernetes.io/instance
-                  operator: In
-                  values:
-                  - my-release
-                - key: app.kubernetes.io/name
-                  operator: In
-                  values:
-                  - opensearch
+                  - key: app.kubernetes.io/instance
+                    operator: In
+                    values:
+                      - my-release
+                  - key: app.kubernetes.io/name
+                    operator: In
+                    values:
+                      - opensearch
+              topologyKey: kubernetes.io/hostname  # Ensure pods are not scheduled on the same node
+
       terminationGracePeriodSeconds: 120
       volumes:
       - name: config
