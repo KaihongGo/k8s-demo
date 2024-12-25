@@ -1,0 +1,9 @@
+replicas: 3
+storage:
+  size: 20Gi
+  className: local-storage
+resources:
+  requests:
+    cpu: 1000m
+    memory: 100Mi
+adminPassword: myStrongPassword123@456

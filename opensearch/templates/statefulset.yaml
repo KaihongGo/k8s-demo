@@ -3,23 +3,23 @@
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: opensearch-cluster-master
+  name: {{ include "opensearch.fullname" . }}-master
   labels:
-    helm.sh/chart: opensearch-2.28.0
-    app.kubernetes.io/name: opensearch
-    app.kubernetes.io/instance: my-release
-    app.kubernetes.io/version: "2.18.0"
-    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    app.kubernetes.io/name: {{ include "opensearch.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/version: {{ .Chart.AppVersion }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
     app.kubernetes.io/component: opensearch-cluster-master
   annotations:
     majorVersion: "2"
 spec:
-  serviceName: opensearch-cluster-master-headless
+  serviceName: {{ include "opensearch.fullname" . }}-master-headless
   selector:
     matchLabels:
-      app.kubernetes.io/name: opensearch
-      app.kubernetes.io/instance: my-release
-  replicas: 3
+      app.kubernetes.io/name: {{ include "opensearch.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  replicas: {{ .Values.replicas }}
   podManagementPolicy: Parallel
   updateStrategy:
     type: RollingUpdate
@@ -31,28 +31,27 @@ spec:
       - "ReadWriteOnce"
       resources:
         requests:
-          storage: "20Gi"
-      storageClassName: "local-storage"  # Use the local-storage StorageClass
+          storage: {{ .Values.storage.size }}
+      storageClassName: {{ .Values.storage.className }}
       volumeMode: Filesystem
   template:
     metadata:
       name: "opensearch-cluster-master"
       labels:
-        helm.sh/chart: opensearch-2.28.0
-        app.kubernetes.io/name: opensearch
-        app.kubernetes.io/instance: my-release
-        app.kubernetes.io/version: "2.18.0"
-        app.kubernetes.io/managed-by: Helm
+        helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+        app.kubernetes.io/name: {{ include "opensearch.name" . }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/version: {{ .Chart.AppVersion }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
         app.kubernetes.io/component: opensearch-cluster-master
       annotations:
-        configchecksum: 13aef69a91126339f6afa7c3e491f236ad006d6e96f271d0d77f5b88a217aca
+        configchecksum: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
     spec:
       securityContext:
         fsGroup: 1000
         runAsUser: 1000
       automountServiceAccountToken: false
       affinity:
-        # Node Affinity: Schedule pods only on specific nodes (e.g., node-1, node-2)
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
             nodeSelectorTerms:
@@ -61,8 +60,6 @@ spec:
                     operator: In
                     values:
                       - "true"
-
-        # Pod Anti-Affinity: Avoid scheduling multiple pods with the same label on the same node
         podAntiAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
             - labelSelector:
@@ -70,18 +67,17 @@ spec:
                   - key: app.kubernetes.io/instance
                     operator: In
                     values:
-                      - my-release
+                      - {{ .Release.Name }}
                   - key: app.kubernetes.io/name
                     operator: In
                     values:
-                      - opensearch
-              topologyKey: kubernetes.io/hostname  # Ensure pods are not scheduled on the same node
-
+                      - {{ include "opensearch.name" . }}
+              topologyKey: kubernetes.io/hostname
       terminationGracePeriodSeconds: 120
       volumes:
       - name: config
         configMap:
-          name: opensearch-cluster-master-config
+          name: {{ include "opensearch.fullname" . }}-master-config
       - emptyDir: {}
         name: config-emptydir
       enableServiceLinks: true
@@ -100,7 +96,7 @@ spec:
           - name: "opensearch-cluster-master"
             mountPath: /usr/share/opensearch/data
       - name: configfile
-        image: "opensearchproject/opensearch:2.18.0"
+        image: "opensearchproject/opensearch:{{ .Chart.AppVersion }}"
         imagePullPolicy: "IfNotPresent"
         command:
         - sh
@@ -124,8 +120,7 @@ spec:
             - ALL
           runAsNonRoot: true
           runAsUser: 1000
-
-        image: "opensearchproject/opensearch:2.18.0"
+        image: "opensearchproject/opensearch:{{ .Chart.AppVersion }}"
         imagePullPolicy: "IfNotPresent"
         readinessProbe:
           failureThreshold: 3
@@ -149,17 +144,17 @@ spec:
           containerPort: 9600
         resources:
           requests:
-            cpu: 1000m
-            memory: 100Mi
+            cpu: {{ .Values.resources.requests.cpu }}
+            memory: {{ .Values.resources.requests.memory }}
         env:
         - name: node.name
           valueFrom:
             fieldRef:
               fieldPath: metadata.name
         - name: cluster.initial_master_nodes
-          value: "opensearch-cluster-master-0,opensearch-cluster-master-1,opensearch-cluster-master-2,"
+          value: "{{ include "opensearch.fullname" . }}-master-0,{{ include "opensearch.fullname" . }}-master-1,{{ include "opensearch.fullname" . }}-master-2,"
         - name: discovery.seed_hosts
-          value: "opensearch-cluster-master-headless"
+          value: "{{ include "opensearch.fullname" . }}-master-headless"
         - name: cluster.name
           value: "opensearch-cluster"
         - name: network.host
@@ -169,7 +164,7 @@ spec:
         - name: node.roles
           value: "master,ingest,data,remote_cluster_client,"
         - name: OPENSEARCH_INITIAL_ADMIN_PASSWORD
-          value: myStrongPassword123@456
+          value: {{ .Values.adminPassword | quote }}
         volumeMounts:
         - name: "opensearch-cluster-master"
           mountPath: /usr/share/opensearch/data
